@@ -1,0 +1,15 @@
+button:not(:disabled),
+a[href],
+label[for],
+select:not(:disabled),
+summary,
+[role='button']:not([aria-disabled='true']),
+[tabindex]:not([tabindex='-1']):not([aria-disabled='true']) {
+  cursor: pointer;
+}
+
+button:disabled,
+select:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
