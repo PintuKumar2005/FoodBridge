@@ -26,7 +26,7 @@ async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T>
   try {
     response = await fetch(`${API_BASE_URL}${path}`, init)
   } catch (error) {
-    throw new Error(`Cannot connect to FoodBridge API at ${API_BASE_URL}. Start the backend with "cd backend && npm run dev", then try again.`)
+    throw new Error(`Cannot connect to FoodBridge API at ${API_BASE_URL}. Start the backend with "cd foodbridge-backend && mvn spring-boot:run", then try again.`)
   }
 
   const payload = await response.json().catch(() => null)
