@@ -25,18 +25,22 @@ public class HealthController {
         boolean databaseConnected = false;
         long donors = 0;
         long receivers = 0;
+        String databaseError = "";
 
         try {
-            databaseConnected = mongoTemplate.getDb().runCommand(org.bson.Document.parse("{ ping: 1 }")).getDouble("ok") == 1.0D;
+            Object ok = mongoTemplate.getDb().runCommand(org.bson.Document.parse("{ ping: 1 }")).get("ok");
+            databaseConnected = ok instanceof Number number && number.doubleValue() == 1.0D;
             donors = userRepository.countByType("donor");
             receivers = userRepository.countByType("receiver");
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
             databaseConnected = false;
+            databaseError = ex.getClass().getSimpleName() + ": " + ex.getMessage();
         }
 
         return Map.of(
             "ok", true,
             "database", databaseConnected ? "connected" : "disconnected",
+            "databaseError", databaseError,
             "donors", donors,
             "receivers", receivers
         );

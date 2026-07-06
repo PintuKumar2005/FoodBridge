@@ -1,10 +1,12 @@
 package com.foodbridge.exception;
 
 import com.foodbridge.dto.ErrorResponse;
+import com.mongodb.MongoException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -43,6 +45,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateKeyException.class)
     ResponseEntity<ErrorResponse> handleDuplicateKey(DuplicateKeyException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, "A record with the same unique value already exists", request.getRequestURI(), Map.of());
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    ResponseEntity<ErrorResponse> handleDatabaseUnavailable(DataAccessException ex, HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Database is unavailable. Check MongoDB connection settings.", request.getRequestURI(), Map.of());
+    }
+
+    @ExceptionHandler(MongoException.class)
+    ResponseEntity<ErrorResponse> handleMongoUnavailable(MongoException ex, HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Database is unavailable. Check MongoDB connection settings.", request.getRequestURI(), Map.of());
     }
 
     @ExceptionHandler(Exception.class)
