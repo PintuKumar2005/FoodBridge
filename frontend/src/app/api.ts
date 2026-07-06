@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api').replace(/\/$/, '')
 const ACCESS_TOKEN_KEY = 'foodbridge-access-token'
 const REFRESH_TOKEN_KEY = 'foodbridge-refresh-token'
 
@@ -26,7 +26,7 @@ async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T>
   try {
     response = await fetch(`${API_BASE_URL}${path}`, init)
   } catch (error) {
-    throw new Error(`Cannot connect to FoodBridge API at ${API_BASE_URL}. Start the backend with "cd foodbridge-backend && mvn spring-boot:run", then try again.`)
+    throw new Error(`Cannot connect to FoodBridge API at ${API_BASE_URL}. Check that the backend is deployed and running.`)
   }
 
   const payload = await response.json().catch(() => null)

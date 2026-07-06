@@ -378,9 +378,9 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
         </aside>
 
         <main className="w-0 min-w-0 flex-1">
-          <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white/[.65] px-4 py-4 shadow-[0_10px_40px_rgba(15,23,42,.08)] backdrop-blur-[20px] dark:border-white/[.08] dark:bg-[#111827]/60 dark:shadow-[0_20px_50px_rgba(0,0,0,.45)] lg:px-6">
+          <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white/[.92] px-4 py-4 shadow-[0_10px_40px_rgba(15,23,42,.08)] backdrop-blur-[20px] dark:border-white/[.08] dark:bg-[#111827]/92 dark:shadow-[0_20px_50px_rgba(0,0,0,.45)] lg:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-start gap-3 sm:items-center">
                 <button
                   aria-label="Open menu"
                   aria-expanded={mobileMenuOpen}
@@ -393,14 +393,14 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
                 >
                   {mobileMenuOpen ? <X size={19} /> : <Menu size={19} />}
                 </button>
-                <div>
-                  <h1 className="text-2xl font-black tracking-[-.03em] md:text-3xl">Welcome back, {currentProfile.name || displayName}</h1>
+                <div className="min-w-0 flex-1 pt-0.5 sm:pt-0">
+                  <h1 className="break-words text-lg font-black leading-tight tracking-tight sm:text-2xl md:text-3xl">Welcome back, {currentProfile.name || displayName}</h1>
                   <p className="mt-1 hidden text-sm font-semibold text-slate-500 dark:text-slate-300 md:block">A calm command center for available food, requests, and impact.</p>
                 </div>
               </div>
 
-              <div className="flex min-w-0 flex-wrap items-center gap-3 xl:justify-end">
-                <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-500 shadow-sm transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 dark:border-white/10 dark:bg-white/5 dark:focus-within:ring-emerald-400/10 xl:max-w-[440px]">
+              <div className="grid min-w-0 grid-cols-[1fr_auto_auto] items-center gap-3 xl:flex xl:flex-wrap xl:justify-end">
+                <label className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-500 shadow-sm transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 dark:border-white/10 dark:bg-white/5 dark:focus-within:ring-emerald-400/10 xl:min-w-[220px] xl:flex-1 xl:max-w-[440px]">
                   <Search size={18} />
                   <input
                     value={search}
@@ -414,8 +414,8 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
                     </button>
                   )}
                 </label>
-                {themeToggle ?? <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white"><Moon size={18} /></button>}
-                <div className="relative">
+                <span className="justify-self-end">{themeToggle ?? <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white"><Moon size={18} /></button>}</span>
+                <div className="relative hidden md:block">
                   <button onClick={() => {
                     setNotificationsOpen((open) => !open)
                     setProfileOpen(false)
@@ -425,7 +425,7 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
                   </button>
                   {notificationsOpen && <NotificationPanel notifications={notifications} unreadCount={unreadNotifications} error={notificationError} onClose={() => setNotificationsOpen(false)} onViewAll={() => { setActiveSection('notifications'); setNotificationsOpen(false) }} />}
                 </div>
-                <div className="relative">
+                <div className="relative shrink-0">
                   <button onClick={() => {
                     setProfileOpen((open) => !open)
                     setNotificationsOpen(false)
