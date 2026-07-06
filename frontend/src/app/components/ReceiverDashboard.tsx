@@ -139,6 +139,7 @@ function calculateImpactScore(requests: FoodRequest[], mealsReceived: number) {
 }
 
 export default function ReceiverDashboard({ user, onLogout, themeToggle }: ReceiverDashboardProps) {
+  const savedFoodStorageKey = `foodbridge-saved-foods-${user.id}`
   const [availableFood, setAvailableFood] = useState<FoodDonation[]>([])
   const [myRequests, setMyRequests] = useState<FoodRequest[]>([])
   const [backendNotifications, setBackendNotifications] = useState<AppNotification[]>([])
@@ -161,11 +162,25 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
   const [analyticsError, setAnalyticsError] = useState('')
   const [selectedFood, setSelectedFood] = useState<FoodDonation | null>(null)
   const [requestModal, setRequestModal] = useState<RequestModalState | null>(null)
+  const [savedFoodIds, setSavedFoodIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(savedFoodStorageKey)
+      return saved ? JSON.parse(saved) as string[] : []
+    } catch {
+      localStorage.removeItem(savedFoodStorageKey)
+      return []
+    }
+  })
 
   const currentProfile = profile ?? user
   const displayName = currentProfile.organizationName || currentProfile.name
   const typeLabel = receiverTypeLabel(currentProfile.organizationType)
   const initials = displayName.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+  const savedFoods = useMemo(() => availableFood.filter((food) => savedFoodIds.includes(food.id)), [availableFood, savedFoodIds])
+
+  useEffect(() => {
+    localStorage.setItem(savedFoodStorageKey, JSON.stringify(savedFoodIds))
+  }, [savedFoodIds, savedFoodStorageKey])
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -268,6 +283,17 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
     } finally {
       setCollectingRequest('')
     }
+  }
+
+  const toggleSavedFood = (food: FoodDonation) => {
+    setSavedFoodIds((current) => {
+      if (current.includes(food.id)) {
+        setMessage({ type: 'info', text: `${food.foodName} removed from saved food.` })
+        return current.filter((id) => id !== food.id)
+      }
+      setMessage({ type: 'success', text: `${food.foodName} saved to your profile.` })
+      return [...current, food.id]
+    })
   }
 
   const acceptedRequests = myRequests.filter((request) => request.status === 'approved')
@@ -436,6 +462,11 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
                     <ProfileCard
                       profile={currentProfile}
                       initials={initials}
+                      savedFoods={savedFoods}
+                      onViewSaved={(food) => {
+                        setSelectedFood(food)
+                        setProfileOpen(false)
+                      }}
                       onClose={() => setProfileOpen(false)}
                       onLogout={onLogout}
                     />
@@ -464,6 +495,8 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
                 requests={myRequests}
                 onView={setSelectedFood}
                 onRequest={openRequestModal}
+                savedFoodIds={savedFoodIds}
+                onToggleSaved={toggleSavedFood}
                 requestingFood={requestingFood}
                 foodType={foodType}
                 onFoodType={setFoodType}
@@ -569,7 +602,7 @@ function StatCard({ label, value, icon: Icon, tone }: { label: string; value: nu
   )
 }
 
-function AvailableFoodView({ foods, loading, requests, onView, onRequest, requestingFood, foodType, onFoodType }: { foods: FoodDonation[]; loading: boolean; requests: FoodRequest[]; onView: (food: FoodDonation) => void; onRequest: (food: FoodDonation) => void; requestingFood: string; foodType: 'All' | FoodDonation['foodType']; onFoodType: (value: 'All' | FoodDonation['foodType']) => void }) {
+function AvailableFoodView({ foods, loading, requests, onView, onRequest, savedFoodIds, onToggleSaved, requestingFood, foodType, onFoodType }: { foods: FoodDonation[]; loading: boolean; requests: FoodRequest[]; onView: (food: FoodDonation) => void; onRequest: (food: FoodDonation) => void; savedFoodIds: string[]; onToggleSaved: (food: FoodDonation) => void; requestingFood: string; foodType: 'All' | FoodDonation['foodType']; onFoodType: (value: 'All' | FoodDonation['foodType']) => void }) {
   const foodTypes = ['All', 'Veg', 'Non-Veg'] as const
 
   return (
@@ -600,13 +633,24 @@ function AvailableFoodView({ foods, loading, requests, onView, onRequest, reques
           </div>
         </div>
       </section>
-      <FoodGrid title="Available food" foods={foods} loading={loading} requests={requests} onView={onView} onRequest={onRequest} requestingFood={requestingFood} />
+      <FoodGrid title="Available food" foods={foods} loading={loading} requests={requests} onView={onView} onRequest={onRequest} savedFoodIds={savedFoodIds} onToggleSaved={onToggleSaved} requestingFood={requestingFood} />
     </div>
   )
 }
 
-function FoodGrid({ title, foods, loading, requests, onView, onRequest, requestingFood }: { title: string; foods: FoodDonation[]; loading: boolean; requests: FoodRequest[]; onView: (food: FoodDonation) => void; onRequest: (food: FoodDonation) => void; requestingFood: string }) {
+function FoodGrid({ title, foods, loading, requests, onView, onRequest, savedFoodIds, onToggleSaved, requestingFood }: { title: string; foods: FoodDonation[]; loading: boolean; requests: FoodRequest[]; onView: (food: FoodDonation) => void; onRequest: (food: FoodDonation) => void; savedFoodIds: string[]; onToggleSaved: (food: FoodDonation) => void; requestingFood: string }) {
   const hasPendingRequest = (foodId: string) => requests.some((request) => request.foodId === foodId && request.status === 'pending')
+  const restaurantGroups = useMemo(() => {
+    const groups = new Map<string, { name: string; foods: FoodDonation[] }>()
+    foods.forEach((food) => {
+      const name = food.organizationName || food.donorName || 'FoodBridge donor'
+      const key = food.donorId || name
+      const group = groups.get(key) ?? { name, foods: [] }
+      group.foods.push(food)
+      groups.set(key, group)
+    })
+    return Array.from(groups.values())
+  }, [foods])
 
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/[.05] md:p-6">
@@ -615,56 +659,75 @@ function FoodGrid({ title, foods, loading, requests, onView, onRequest, requesti
           <p className="text-xs font-black uppercase tracking-[.22em] text-orange-600 dark:text-orange-300">Available food</p>
           <h2 className="mt-2 text-2xl font-black">{title}</h2>
         </div>
-        <p className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-600 dark:bg-white/10 dark:text-slate-300">{foods.length} shown</p>
       </div>
       {loading && <div className="mt-5 grid gap-x-6 gap-y-8 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-[360px] animate-pulse rounded-[28px] bg-slate-100 dark:bg-white/10" />)}</div>}
       {!loading && foods.length === 0 && <EmptyInline icon={Utensils} title="No nearby food donations" copy="Food donations will appear here when a donor publishes within 10 km of your saved receiver location." />}
       {!loading && foods.length > 0 && (
-        <div className="mt-5 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {foods.map((food) => {
+        <div className="mt-6 space-y-7">
+          {restaurantGroups.map((group) => (
+            <section key={group.name} className="min-w-0">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-xl font-black tracking-tight text-slate-950 dark:text-white">{group.name}</h3>
+                </div>
+              </div>
+              <div className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 md:px-6">
+          {group.foods.map((food) => {
             const pending = hasPendingRequest(food.id)
+            const saved = savedFoodIds.includes(food.id)
             return (
-              <article key={food.id} className="group overflow-hidden rounded-[28px] bg-white transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-900/10 dark:bg-white/[.04] dark:hover:shadow-black/30">
-                <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] bg-orange-50 dark:bg-white/10">
+              <article key={food.id} className="group w-[68vw] max-w-[250px] shrink-0 snap-start overflow-hidden rounded-[20px] border border-slate-200 bg-white p-2 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl hover:shadow-slate-900/10 dark:border-white/10 dark:bg-white/[.04] dark:hover:border-orange-400/25 dark:hover:shadow-black/30 sm:w-[260px] sm:max-w-none lg:w-[280px]">
+                <div className="relative aspect-[5/3] overflow-hidden rounded-[16px] bg-orange-50 dark:bg-white/10">
                   {getFoodImage(food) ? (
                     <img src={getFoodImage(food)} alt={food.foodName} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center bg-[linear-gradient(135deg,#fff7ed,#dcfce7)] text-orange-600 dark:bg-[linear-gradient(135deg,rgba(251,146,60,.16),rgba(34,197,94,.14))] dark:text-orange-200">
-                      <Utensils size={42} />
-                      <span className="mt-3 text-sm font-black">{food.foodName}</span>
+                      <Utensils size={32} />
+                      <span className="mt-2 px-3 text-center text-xs font-black">{food.foodName}</span>
                     </div>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/70 to-transparent p-3">
-                    <p className="text-lg font-black text-white">{food.quantity} {food.unit} available</p>
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/75 to-transparent p-2.5">
+                    <p className="text-sm font-black text-white">{food.quantity} {food.unit}</p>
                   </div>
-                  <span className={`absolute left-3 top-3 rounded-full px-3 py-1 text-xs font-black shadow-sm ${food.foodType === 'Non-Veg' ? 'bg-red-50 text-red-700' : food.foodType === 'Both' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>{food.foodType}</span>
-                  <button aria-label="Bookmark food" className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-slate-600 shadow-sm transition hover:text-orange-600"><Bookmark size={16} /></button>
+                  <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-black shadow-sm ${food.foodType === 'Non-Veg' ? 'bg-red-50 text-red-700' : food.foodType === 'Both' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>{food.foodType}</span>
+                  <button
+                    type="button"
+                    onClick={() => onToggleSaved(food)}
+                    aria-label={saved ? 'Remove saved food' : 'Save food'}
+                    aria-pressed={saved}
+                    className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/95 shadow-sm transition hover:text-orange-600 ${saved ? 'text-orange-500' : 'text-slate-600'}`}
+                  >
+                    <Bookmark size={14} className={saved ? 'fill-current' : ''} />
+                  </button>
                 </div>
-                <div className="px-1 pb-1 pt-3">
-                  <div className="flex items-start justify-between gap-3">
+                <div className="px-1 pb-1 pt-2.5">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <h3 className="truncate text-xl font-black tracking-tight">{food.foodName}</h3>
-                      <p className="mt-1 truncate text-sm font-bold text-slate-500 dark:text-slate-400">{food.organizationName || food.donorName}</p>
+                      <h3 className="truncate text-sm font-black leading-tight tracking-tight">{food.foodName}</h3>
+                      <p className="mt-0.5 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">{food.organizationName || food.donorName}</p>
                     </div>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1 text-xs font-black text-white"><ShieldCheck size={12} />Open</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white"><ShieldCheck size={10} />Open</span>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600 dark:text-slate-300">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-white/10">Pickup {pickupLabel(food.pickupTime)}</span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-white/10">{food.status}</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] font-black text-slate-600 dark:text-slate-300">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-white/10">Pickup {pickupLabel(food.pickupTime)}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-white/10">{food.status}</span>
                   </div>
-                  <div className="mt-3 space-y-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                    <p className="flex items-start gap-2"><MapPin className="mt-0.5 shrink-0 text-orange-500" size={16} /><span className="line-clamp-2">{food.location}</span></p>
-                    <p className="flex items-center gap-2"><Sparkles className="shrink-0 text-orange-500" size={16} /><span className="truncate">Expires {formatDate(food.expiryTime)}</span></p>
+                  <div className="mt-2 space-y-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    <p className="flex items-start gap-1.5"><MapPin className="mt-0.5 shrink-0 text-orange-500" size={13} /><span className="line-clamp-1">{food.location}</span></p>
+                    <p className="flex items-center gap-1.5"><Sparkles className="shrink-0 text-orange-500" size={13} /><span className="truncate">Expires {formatDate(food.expiryTime)}</span></p>
                   </div>
-                  {food.description && <p className="mt-3 line-clamp-2 text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">{food.description}</p>}
-                  <div className="mt-4 grid grid-cols-[1fr_1.2fr] gap-2">
-                    <button onClick={() => onView(food)} className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-200 dark:bg-white/10 dark:text-white dark:hover:bg-white/15">View</button>
-                    <button onClick={() => onRequest(food)} disabled={pending || requestingFood === food.id} className={`rounded-xl px-3 py-2.5 text-xs font-black transition ${pending ? 'bg-slate-200 text-slate-500 dark:bg-white/10' : 'bg-orange-500 text-white hover:bg-orange-600'}`}>{pending ? 'Pending' : requestingFood === food.id ? 'Sending...' : 'Request'}</button>
+                  {food.description && <p className="mt-2 line-clamp-1 text-[11px] font-semibold leading-4 text-slate-500 dark:text-slate-400">{food.description}</p>}
+                  <div className="mt-3 grid grid-cols-[1fr_1.15fr] gap-1.5">
+                    <button onClick={() => onView(food)} className="rounded-xl bg-slate-100 px-2 py-2 text-[11px] font-black text-slate-700 transition hover:bg-slate-200 dark:bg-white/10 dark:text-white dark:hover:bg-white/15">View</button>
+                    <button onClick={() => onRequest(food)} disabled={pending || requestingFood === food.id} className={`rounded-xl px-2 py-2 text-[11px] font-black transition ${pending ? 'bg-slate-200 text-slate-500 dark:bg-white/10' : 'bg-orange-500 text-white hover:bg-orange-600'}`}>{pending ? 'Pending' : requestingFood === food.id ? 'Sending...' : 'Request'}</button>
                   </div>
                 </div>
               </article>
             )
           })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </section>
@@ -814,7 +877,7 @@ function NotificationPanel({ notifications, unreadCount, error, onClose, onViewA
   )
 }
 
-function ProfileCard({ profile, initials, onClose, onLogout }: { profile: ProfileResponse; initials: string; onClose: () => void; onLogout: () => void }) {
+function ProfileCard({ profile, initials, savedFoods, onViewSaved, onClose, onLogout }: { profile: ProfileResponse; initials: string; savedFoods: FoodDonation[]; onViewSaved: (food: FoodDonation) => void; onClose: () => void; onLogout: () => void }) {
   return (
     <section className="fixed right-4 top-20 z-[80] w-[min(390px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_20px_50px_rgba(15,23,42,.16)] dark:border-white/[.08] dark:bg-[#111827] dark:shadow-[0_20px_50px_rgba(0,0,0,.55)] md:right-8 md:top-24">
       <div className="relative overflow-hidden border-b border-slate-100 p-5 dark:border-white/10">
@@ -833,6 +896,41 @@ function ProfileCard({ profile, initials, onClose, onLogout }: { profile: Profil
           <button onClick={onClose} aria-label="Close receiver profile" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10">
             <X size={16} />
           </button>
+        </div>
+      </div>
+
+      <div className="max-h-[260px] overflow-y-auto p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Bookmark size={15} className="text-orange-500" />
+          <p className="text-sm font-black text-slate-950 dark:text-white">Saved food</p>
+        </div>
+        <div className="space-y-2">
+          {savedFoods.map((food) => (
+            <button
+              key={food.id}
+              type="button"
+              onClick={() => onViewSaved(food)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-2 text-left transition hover:border-orange-200 hover:bg-orange-50 dark:border-white/10 dark:bg-white/[.04] dark:hover:bg-white/[.08]"
+            >
+              <span className="flex h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-400/10 dark:text-orange-200">
+                {getFoodImage(food) ? (
+                  <img src={getFoodImage(food)} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center"><Utensils size={18} /></span>
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-black text-slate-800 dark:text-slate-100">{food.foodName}</span>
+                <span className="mt-0.5 block truncate text-xs font-bold text-slate-500 dark:text-slate-300">{food.organizationName || food.donorName}</span>
+              </span>
+            </button>
+          ))}
+          {!savedFoods.length && (
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center dark:border-white/10">
+              <Bookmark className="mx-auto text-slate-300" size={22} />
+              <p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-300">Saved food will appear here.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -980,26 +1078,89 @@ function ProfilePanel({ profile, onLogout }: { profile: ProfileResponse; onLogou
 }
 
 function FoodDetailsModal({ food, pending, onClose, onRequest }: { food: FoodDonation; pending: boolean; onClose: () => void; onRequest: () => void }) {
+  const image = getFoodImage(food)
+  const typeClass = food.foodType === 'Non-Veg'
+    ? 'bg-red-50 text-red-700 ring-red-100 dark:bg-red-400/10 dark:text-red-200 dark:ring-red-400/20'
+    : food.foodType === 'Both'
+      ? 'bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-200 dark:ring-blue-400/20'
+      : 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-400/20'
+
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[32px] border border-slate-200 bg-white shadow-2xl dark:border-white/[.08] dark:bg-[#111827]">
-        <div className="flex items-center justify-between border-b border-slate-100 p-5 dark:border-white/10"><div><p className="text-xs font-black uppercase tracking-[.22em] text-emerald-600">Food details</p><h2 className="mt-1 text-2xl font-black">{food.foodName}</h2></div><button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 dark:bg-white/10"><X size={18} /></button></div>
-        {getFoodImage(food) && <img src={getFoodImage(food)} alt="" className="h-72 w-full object-cover" />}
-        <div className="grid gap-5 p-5 md:grid-cols-2">
-          <Detail label="Description" value={food.description || 'No description'} />
-          <Detail label="Quantity" value={`${food.quantity} ${food.unit}`} />
-          <Detail label="Cooking Time" value="Not provided by backend" />
-          <Detail label="Expiry Time" value={formatDate(food.expiryTime)} />
-          <Detail label="Pickup Window" value={formatDate(food.pickupTime)} />
-          <Detail label="Donor" value={food.organizationName || food.donorName} />
-          <Detail label="Pickup Address" value={food.location} />
-          <Detail label="Current Status" value={food.status} />
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <section className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-t-[30px] border border-slate-200 bg-white shadow-2xl dark:border-white/[.08] dark:bg-[#111827] sm:rounded-[32px]">
+        <div className="relative">
+          <div className="relative h-56 overflow-hidden bg-orange-50 dark:bg-white/10 sm:h-72">
+            {image ? (
+              <img src={image} alt={food.foodName} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center bg-[linear-gradient(135deg,#fff7ed,#dcfce7)] text-orange-600 dark:bg-[linear-gradient(135deg,rgba(251,146,60,.16),rgba(34,197,94,.14))] dark:text-orange-200">
+                <Utensils size={52} />
+                <span className="mt-3 text-sm font-black">{food.foodName}</span>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-slate-950/20" />
+            <button onClick={onClose} aria-label="Close food details" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-lg transition hover:scale-105 dark:bg-[#111827]/90 dark:text-white">
+              <X size={18} />
+            </button>
+            <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${typeClass}`}>{food.foodType}</span>
+                <span className="rounded-full bg-white/18 px-3 py-1 text-xs font-black backdrop-blur">Fresh pickup</span>
+              </div>
+              <h2 className="line-clamp-2 text-2xl font-black leading-tight tracking-tight sm:text-3xl">{food.foodName}</h2>
+              <p className="mt-1 truncate text-sm font-bold text-white/80">{food.organizationName || food.donorName}</p>
+            </div>
+          </div>
+
+          <div className="max-h-[calc(92vh-14rem)] overflow-y-auto p-5 sm:max-h-[calc(92vh-18rem)] sm:p-6">
+            <div className="grid grid-cols-3 gap-3">
+              <PremiumFact icon={Utensils} label="Quantity" value={`${food.quantity} ${food.unit}`} />
+              <PremiumFact icon={Clock3} label="Pickup" value={pickupLabel(food.pickupTime)} />
+              <PremiumFact icon={ShieldCheck} label="Status" value={food.status} />
+            </div>
+
+            <div className="mt-5 rounded-3xl bg-slate-50 p-4 dark:bg-white/[.05]">
+              <p className="text-xs font-black uppercase tracking-[.18em] text-slate-400">About this food</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{food.description || 'No description provided by donor.'}</p>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <PremiumDetail icon={MapPin} label="Pickup address" value={food.location} />
+              <PremiumDetail icon={Sparkles} label="Expires" value={formatDate(food.expiryTime)} />
+              <PremiumDetail icon={Clock3} label="Pickup window" value={formatDate(food.pickupTime)} />
+            </div>
+          </div>
         </div>
-        <div className="grid gap-3 border-t border-slate-100 p-5 dark:border-white/10 md:grid-cols-2">
-          <button disabled={pending} onClick={onRequest} className="rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-black text-white disabled:bg-slate-200 disabled:text-slate-500">{pending ? 'Request Pending' : 'Request Food'}</button>
-          <button className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black dark:border-white/10">Contact Donor</button>
+
+        <div className="grid gap-3 border-t border-slate-100 bg-white p-4 dark:border-white/10 dark:bg-[#111827] sm:grid-cols-[1fr_1.4fr]">
+          <button className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Contact Donor</button>
+          <button disabled={pending} onClick={onRequest} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none dark:disabled:bg-white/10">{pending ? 'Request Pending' : 'Request Food'}</button>
         </div>
       </section>
+    </div>
+  )
+}
+
+function PremiumFact({ icon: Icon, label, value }: { icon: typeof Utensils; label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3 text-center dark:bg-white/[.05]">
+      <Icon className="mx-auto text-orange-500" size={17} />
+      <p className="mt-2 text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-xs font-black text-slate-800 dark:text-slate-100">{value}</p>
+    </div>
+  )
+}
+
+function PremiumDetail({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-3xl border border-slate-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[.04]">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600 dark:bg-orange-400/10 dark:text-orange-200">
+        <Icon size={18} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs font-black uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-700 dark:text-slate-200">{value}</p>
+      </div>
     </div>
   )
 }
