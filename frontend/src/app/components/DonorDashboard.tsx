@@ -367,9 +367,16 @@ export default function DonorDashboard({ user, onLogout, themeToggle }: DonorDas
         </aside>
 
         <main className="w-0 min-w-0 flex-1">
-          <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white/[.92] px-4 py-4 shadow-[0_10px_40px_rgba(15,23,42,.08)] backdrop-blur-[20px] dark:border-white/[.08] dark:bg-[#111827]/92 dark:shadow-[0_20px_50px_rgba(0,0,0,.45)] lg:px-6">
+          <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white px-4 py-4 shadow-[0_10px_40px_rgba(15,23,42,.08)] backdrop-blur-[20px] dark:border-white/[.08] dark:bg-[#020617] dark:shadow-[0_20px_50px_rgba(0,0,0,.55)] lg:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 items-start gap-3 sm:items-center">
+              <div className="flex min-w-0 items-start justify-between gap-3 sm:items-center">
+                <div className="min-w-0 flex-1 pt-0.5 sm:pt-0">
+                  <h1 className="break-words text-xl font-black leading-tight tracking-tight sm:text-2xl md:text-3xl">{sectionMeta.overview.title}</h1>
+                  <p className="mt-1 hidden text-sm font-semibold text-slate-500 dark:text-slate-300 md:block">{sectionMeta.overview.copy}</p>
+                </div>
+              </div>
+
+              <div className="grid min-w-0 grid-cols-[auto_1fr_auto_auto] items-center gap-3 md:grid-cols-[1fr_auto_auto] xl:flex xl:flex-wrap xl:justify-end">
                 <button
                   type="button"
                   aria-label="Show dashboard menu"
@@ -379,18 +386,11 @@ export default function DonorDashboard({ user, onLogout, themeToggle }: DonorDas
                     setNotificationsOpen(false)
                     setProfileOpen(false)
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-white lg:hidden"
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-[#111827] dark:text-white lg:hidden"
                 >
                   {mobileMenuOpen ? <X size={19} /> : <Menu size={19} />}
                 </button>
-                <div className="min-w-0 flex-1 pt-0.5 sm:pt-0">
-                  <h1 className="break-words text-lg font-black leading-tight tracking-tight sm:text-2xl md:text-3xl">{sectionMeta.overview.title}</h1>
-                  <p className="mt-1 hidden text-sm font-semibold text-slate-500 dark:text-slate-300 md:block">{sectionMeta.overview.copy}</p>
-                </div>
-              </div>
-
-              <div className="grid min-w-0 grid-cols-[1fr_auto_auto] items-center gap-3 xl:flex xl:flex-wrap xl:justify-end">
-                <label className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-500 shadow-sm transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 dark:border-white/10 dark:bg-white/5 dark:focus-within:ring-emerald-400/10 xl:min-w-[220px] xl:flex-1 xl:max-w-[440px]">
+                <label className="flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-500 shadow-sm transition focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 dark:border-white/10 dark:bg-[#111827] dark:text-slate-300 dark:focus-within:ring-emerald-400/10 xl:min-w-[220px] xl:flex-1 xl:max-w-[440px]">
                   <Search size={18} />
                   <input
                     value={search}
@@ -405,6 +405,23 @@ export default function DonorDashboard({ user, onLogout, themeToggle }: DonorDas
                   )}
                 </label>
                 <span className="justify-self-end">{themeToggle ?? <button className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white"><Moon size={18} /></button>}</span>
+                <div className="relative shrink-0 md:hidden">
+                  <button onClick={() => {
+                    setProfileOpen((open) => !open)
+                    setNotificationsOpen(false)
+                    setMobileMenuOpen(false)
+                  }} aria-label="Open donor profile" className="rounded-2xl outline-none ring-offset-2 ring-offset-[#f8fafc] transition hover:scale-[1.03] focus-visible:ring-4 focus-visible:ring-emerald-100 dark:ring-offset-[#020617] dark:focus-visible:ring-emerald-400/20">
+                    <Avatar profile={currentProfile} initials={initials} size="sm" />
+                  </button>
+                  {profileOpen && (
+                    <ProfileCard
+                      profile={currentProfile}
+                      initials={initials}
+                      onClose={() => setProfileOpen(false)}
+                      onLogout={onLogout}
+                    />
+                  )}
+                </div>
                 <div className="relative hidden md:block">
                   <button onClick={() => {
                     setNotificationsOpen((open) => !open)
@@ -426,7 +443,7 @@ export default function DonorDashboard({ user, onLogout, themeToggle }: DonorDas
                     />
                   )}
                 </div>
-                <div className="relative shrink-0">
+                <div className="relative hidden shrink-0 md:block">
                   <button onClick={() => {
                     setProfileOpen((open) => !open)
                     setNotificationsOpen(false)
@@ -861,8 +878,8 @@ function NotificationList({ notifications, error, compact = false }: { notificat
 
 function ProfileCard({ profile, initials, onClose, onLogout }: { profile: ProfileResponse; initials: string; onClose: () => void; onLogout: () => void }) {
   return (
-    <section className="fixed right-4 top-20 z-[80] w-[min(390px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_20px_50px_rgba(15,23,42,.16)] dark:border-white/[.08] dark:bg-[#111827] dark:shadow-[0_20px_50px_rgba(0,0,0,.55)] md:right-8 md:top-24">
-      <div className="relative overflow-hidden border-b border-slate-100 p-5 dark:border-white/10">
+    <section className="fixed right-4 top-20 z-[80] w-[min(390px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[#E5E7EB] bg-white shadow-[0_20px_50px_rgba(15,23,42,.16)] dark:border-white/[.08] dark:bg-[#020617] dark:shadow-[0_20px_50px_rgba(0,0,0,.65)] md:right-8 md:top-24">
+      <div className="relative overflow-hidden border-b border-slate-100 bg-white p-5 dark:border-white/10 dark:bg-[#111827]">
         <div className="pointer-events-none absolute -right-16 -top-16 h-36 w-36 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-400/10" />
         <div className="relative flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">

@@ -85,7 +85,7 @@ export default function App() {
       aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
       aria-pressed={dark}
       onClick={() => setDark((value) => !value)}
-      className="group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white/85 text-[#111827] shadow-lg shadow-slate-900/5 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-[#16A34A]/40 hover:text-[#16A34A] hover:shadow-xl dark:border-white/[.08] dark:bg-[#1F2937]/80 dark:text-[#F9FAFB] dark:hover:border-[#22C55E]/40 dark:hover:text-[#22C55E]"
+      className="group flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#E5E7EB] bg-white text-[#111827] shadow-lg shadow-slate-900/5 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-[#16A34A]/40 hover:text-[#16A34A] hover:shadow-xl dark:border-white/[.08] dark:bg-[#111827] dark:text-[#F9FAFB] dark:hover:border-[#22C55E]/40 dark:hover:text-[#22C55E]"
     >
       {dark ? <Moon size={19} /> : <Sun size={19} />}
     </button>
