@@ -1,7 +1,8 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { CheckCircle2, ChevronLeft, Loader2, MapPin, ShieldCheck } from 'lucide-react'
-import { registerReceiver, type AuthUser } from '../api'
+import { CheckCircle2, ChevronLeft, LocateFixed, Loader2, ShieldCheck } from 'lucide-react'
+import { registerReceiver, type AuthUser, type StoredDocument } from '../api'
 import { Field, FormSection, SelectField, UploadBox } from '../components/RegistrationFields'
+import { getCurrentCoordinates, getCurrentLocationAddress, type LocationDraft } from '../location'
 
 interface ReceiverRegistrationPageProps {
   onBack: () => void
@@ -13,20 +14,49 @@ export default function ReceiverRegistrationPage({ onBack, onSubmit }: ReceiverR
   const lastPincodeRef = useRef('')
   const [status, setStatus] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [locating, setLocating] = useState(false)
   const [pincodeLoading, setPincodeLoading] = useState(false)
+  const [locationLoading, setLocationLoading] = useState(false)
   const [pincodeAutoFilled, setPincodeAutoFilled] = useState(false)
   const [locationState, setLocationState] = useState<{ address: string; latitude?: number; longitude?: number }>({ address: '' })
+
+  const getRegistrationCoordinates = async () => {
+    if (locationState.latitude !== undefined && locationState.longitude !== undefined) {
+      return { latitude: locationState.latitude, longitude: locationState.longitude }
+    }
+    setStatus('Allow location permission so nearby donations can be matched to your organization.')
+    return getCurrentCoordinates()
+  }
+
+  const fileToDocument = (file: File): Promise<StoredDocument> => {
+    if (file.size > 2 * 1024 * 1024) return Promise.reject(new Error(`${file.name} must be smaller than 2 MB`))
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve({ name: file.name, type: file.type, size: file.size, data: String(reader.result) })
+      reader.onerror = () => reject(new Error(`Could not read ${file.name}`))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const getDocument = async (formData: FormData, name: string) => {
+    const file = formData.get(name)
+    return file instanceof File && file.size > 0 ? fileToDocument(file) : undefined
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setStatus('')
     setIsSubmitting(true)
     try {
-      const payload = Object.fromEntries(new FormData(event.currentTarget))
+      const formData = new FormData(event.currentTarget)
+      const payload: Record<string, unknown> = Object.fromEntries(formData)
+      const coordinates = await getRegistrationCoordinates()
       payload.address = locationState.address
-      if (locationState.latitude !== undefined) payload.latitude = String(locationState.latitude)
-      if (locationState.longitude !== undefined) payload.longitude = String(locationState.longitude)
+      payload.latitude = String(coordinates.latitude)
+      payload.longitude = String(coordinates.longitude)
+      payload.documents = {
+        registrationCertificate: await getDocument(formData, 'registrationCertificate'),
+        organizationIdProof: await getDocument(formData, 'organizationIdProof'),
+      }
       const response = await registerReceiver(payload)
       onSubmit(response.user, response)
     } catch (error) {
@@ -36,7 +66,7 @@ export default function ReceiverRegistrationPage({ onBack, onSubmit }: ReceiverR
     }
   }
 
-  const fillAddressFields = (address: Record<string, string>, displayName: string, options: { preservePincode?: boolean } = {}) => {
+  const applyLocation = (location: LocationDraft, options: { preservePincode?: boolean } = {}) => {
     if (!formRef.current) return
 
     const setField = (name: string, value?: string) => {
@@ -44,29 +74,35 @@ export default function ReceiverRegistrationPage({ onBack, onSubmit }: ReceiverR
       if (control instanceof HTMLInputElement && value) control.value = value
     }
 
-    const city = address.city || address.town || address.village || address.suburb || address.county
-    const state = address.state
-    const pincode = address.postcode
-    const readableAddress = displayName || [
-      address.road,
-      address.neighbourhood || address.suburb,
-      city,
-      state,
-      pincode,
-    ].filter(Boolean).join(', ')
-
-    setField('address', readableAddress)
-    setLocationState((current) => ({
-      address: readableAddress,
-      latitude: current.latitude,
-      longitude: current.longitude,
-    }))
-    setField('city', city)
-    setField('state', state)
+    setField('address', location.address)
+    setLocationState({
+      address: location.address,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    })
+    setField('city', location.city)
+    setField('state', location.state)
     const pincodeControl = formRef.current.elements.namedItem('pincode')
     const existingPincode = pincodeControl instanceof HTMLInputElement ? pincodeControl.value.replace(/\D/g, '') : ''
     if (!options.preservePincode || existingPincode.length !== 6) {
-      setField('pincode', pincode)
+      setField('pincode', location.pincode)
+    }
+  }
+
+  const handleUseCurrentLocation = async () => {
+    setStatus('')
+    setLocationLoading(true)
+    try {
+      const location = await getCurrentLocationAddress()
+      applyLocation(location)
+      setPincodeAutoFilled(Boolean(location.city || location.state))
+      setStatus('Current location added. Review the address before submitting.')
+    } catch (error) {
+      setStatus(typeof error === 'object' && error !== null && 'code' in error && error.code === 1
+        ? 'Location permission was denied. Please allow location access or enter your address manually.'
+        : error instanceof Error ? error.message : 'Could not detect your current location.')
+    } finally {
+      setLocationLoading(false)
     }
   }
 
@@ -129,39 +165,6 @@ export default function ReceiverRegistrationPage({ onBack, onSubmit }: ReceiverR
     }
   }
 
-  const fillCurrentLocation = () => {
-    setStatus('')
-    if (!navigator.geolocation) {
-      setStatus('GPS is not available in this browser.')
-      return
-    }
-
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords
-        try {
-          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=en&lat=${latitude}&lon=${longitude}`)
-          if (!response.ok) throw new Error('Unable to read address from your location.')
-          const result = await response.json() as { display_name?: string; address?: Record<string, string> }
-          if (!result.display_name) throw new Error('No readable address found for your current location.')
-          setLocationState({ address: result.display_name, latitude, longitude })
-          fillAddressFields(result.address ?? {}, result.display_name)
-          setStatus('Current address filled automatically.')
-        } catch (error) {
-          setStatus(error instanceof Error ? error.message : 'Unable to fetch address from your location.')
-        } finally {
-          setLocating(false)
-        }
-      },
-      (error) => {
-        setStatus(error.code === error.PERMISSION_DENIED ? 'Location permission was denied. Please allow location access to use this feature.' : 'GPS is unavailable right now. Please try again or enter the address manually.')
-        setLocating(false)
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-    )
-  }
-
   return (
     <section className="premium-page registration-page relative isolate overflow-hidden bg-[linear-gradient(180deg,#F8FAFC_0%,#F0FDF4_52%,#ECFDF5_100%)] px-5 py-12 text-[#111827] dark:bg-[linear-gradient(180deg,#020617_0%,#0B1220_52%,#111827_100%)] dark:text-[#F9FAFB] lg:px-8">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_12%_10%,rgba(22,163,74,.12),transparent_30%),radial-gradient(circle_at_88%_14%,rgba(15,118,110,.09),transparent_28%),radial-gradient(circle_at_66%_6%,rgba(14,165,233,.07),transparent_25%)] dark:bg-[radial-gradient(circle_at_14%_8%,rgba(34,197,94,.10),transparent_30%),radial-gradient(circle_at_86%_18%,rgba(6,182,212,.09),transparent_28%),radial-gradient(circle_at_66%_6%,rgba(99,102,241,.08),transparent_25%)]" />
@@ -205,7 +208,20 @@ export default function ReceiverRegistrationPage({ onBack, onSubmit }: ReceiverR
             </FormSection>
 
             <FormSection title="Address">
-              <Field label="Full Address" name="address" placeholder="Street, landmark, area" required wide value={locationState.address} onChange={(event) => setLocationState({ address: event.currentTarget.value })} action={<button type="button" onClick={fillCurrentLocation} disabled={locating} aria-label="Use current location" className="flex w-12 shrink-0 items-center justify-center text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-400/10">{locating ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}</button>} />
+              <Field
+                label="Full Address"
+                name="address"
+                placeholder="Street, landmark, area"
+                required
+                wide
+                value={locationState.address}
+                onChange={(event) => setLocationState((current) => ({ ...current, address: event.currentTarget.value }))}
+                action={(
+                  <button type="button" onClick={handleUseCurrentLocation} disabled={locationLoading} aria-label="Use current location" className="flex w-12 shrink-0 items-center justify-center text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-400/10">
+                    {locationLoading ? <Loader2 size={18} className="animate-spin" /> : <LocateFixed size={18} />}
+                  </button>
+                )}
+              />
               <input type="hidden" name="latitude" value={locationState.latitude ?? ''} />
               <input type="hidden" name="longitude" value={locationState.longitude ?? ''} />
               <Field label="District" name="city" placeholder="Bangalore Urban" required readOnly={pincodeAutoFilled} disabled={pincodeLoading} />
@@ -220,8 +236,8 @@ export default function ReceiverRegistrationPage({ onBack, onSubmit }: ReceiverR
             </FormSection>
 
             <FormSection title="Document Upload">
-              <UploadBox title="Registration Certificate" />
-              <UploadBox title="Organization ID Proof" />
+              <UploadBox title="Registration Certificate" name="registrationCertificate" />
+              <UploadBox title="Organization ID Proof" name="organizationIdProof" />
             </FormSection>
 
             <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100">

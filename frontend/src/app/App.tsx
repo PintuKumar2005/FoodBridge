@@ -10,9 +10,17 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import ReceiverRegistrationPage from './pages/ReceiverRegistrationPage'
 import SignupPage from './pages/SignupPage'
-import { clearAuthTokens, storeAuthTokens, type AuthUser } from './api'
+import { clearAuthTokens, hasAuthToken, storeAuthTokens, type AuthUser } from './api'
 
 type Page = 'home' | 'login' | 'signup' | 'donor-register' | 'receiver-register' | 'donor-dashboard' | 'receiver-dashboard' | 'admin-dashboard'
+
+function pageFromHash(): Page | null {
+  return window.location.hash.toLowerCase() === '#admin' ? 'admin-dashboard' : null
+}
+
+function hashForPage(page: Page) {
+  return page === 'admin-dashboard' ? '#admin' : ''
+}
 
 export default function App() {
   const [dark, setDark] = useState(() => {
@@ -21,6 +29,10 @@ export default function App() {
   })
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
+      if (!hasAuthToken()) {
+        localStorage.removeItem('foodbridge-user')
+        return null
+      }
       const saved = localStorage.getItem('foodbridge-user')
       return saved ? JSON.parse(saved) as AuthUser : null
     } catch {
@@ -30,6 +42,9 @@ export default function App() {
   })
   const [page, setPage] = useState<Page>(() => {
     try {
+      const hashedPage = pageFromHash()
+      if (hashedPage) return hashedPage
+      if (!hasAuthToken()) return 'home'
       const saved = localStorage.getItem('foodbridge-user')
       if (!saved) return 'home'
       const user = JSON.parse(saved) as AuthUser
@@ -42,6 +57,9 @@ export default function App() {
 
   const navigate = (nextPage: Page) => {
     setPage(nextPage)
+    const nextHash = hashForPage(nextPage)
+    const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`
+    window.history.replaceState(null, '', nextUrl)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -69,13 +87,25 @@ export default function App() {
   }, [dark])
 
   useEffect(() => {
+    const handleHashChange = () => {
+      const hashedPage = pageFromHash()
+      if (hashedPage) {
+        setPage(hashedPage)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  useEffect(() => {
     const invalidDashboard =
       (page === 'donor-dashboard' && currentUser?.type !== 'donor') ||
-      (page === 'receiver-dashboard' && currentUser?.type !== 'receiver') ||
-      (page === 'admin-dashboard' && currentUser?.type !== 'admin')
+      (page === 'receiver-dashboard' && currentUser?.type !== 'receiver')
 
     if (invalidDashboard) {
-      setPage('login')
+      navigate('login')
     }
   }, [currentUser, page])
 
@@ -107,7 +137,28 @@ export default function App() {
 
   if (page === 'admin-dashboard') {
     if (!currentUser || currentUser.type !== 'admin') {
-      return null
+      return (
+        <div className={dark ? 'dark' : ''}>
+          <div className="foodbridge-shell min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F0FDF4_50%,#ECFDF5_100%)] text-[#111827] transition-colors duration-300 dark:bg-[linear-gradient(180deg,#020617_0%,#0B1220_52%,#111827_100%)] dark:text-[#F9FAFB]">
+            <SiteHeader
+              dark={dark}
+              onHome={() => navigate('home')}
+              onLogin={() => navigate('login')}
+              onSignup={() => navigate('signup')}
+              onToggleTheme={() => setDark((value) => !value)}
+            />
+            <main id="admin">
+              <LoginPage
+                initialRole="admin"
+                adminOnly
+                onBack={() => navigate('home')}
+                onLogin={completeLogin}
+              />
+            </main>
+            <SiteFooter />
+          </div>
+        </div>
+      )
     }
     return <div className={dark ? 'dark' : ''}><AdminDashboard user={currentUser} onLogout={logout} /></div>
   }

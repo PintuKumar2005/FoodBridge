@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -51,6 +52,11 @@ public class CompatibilityController {
         return compatibilityApiService.createDonation(payload);
     }
 
+    @PostMapping("/donations/analyze")
+    public Map<String, Object> analyzeDonationImage(@RequestBody Map<String, Object> payload) {
+        return compatibilityApiService.analyzeDonationImage(payload);
+    }
+
     @GetMapping("/donations")
     public Map<String, Object> getDonations(
         @RequestParam(required = false) String donorId,
@@ -85,6 +91,11 @@ public class CompatibilityController {
     @GetMapping("/profile")
     public Map<String, Object> getProfile(@RequestParam(required = false) String userId) {
         return compatibilityApiService.getProfile(userId);
+    }
+
+    @PutMapping("/profile")
+    public Map<String, Object> updateProfile(@RequestBody Map<String, Object> payload) {
+        return compatibilityApiService.updateProfile(payload);
     }
 
     @GetMapping("/notifications")

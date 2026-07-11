@@ -1,14 +1,25 @@
 import { useState } from 'react'
 import { CheckCircle2, ChevronLeft, LogIn, Phone, ShieldCheck, Store, Users } from 'lucide-react'
-import { sendOtp, verifyOtp, type AccountRole, type AuthUser } from '../api'
+import { sendOtp, verifyOtp, type AuthUser, type UserRole } from '../api'
 
 interface LoginPageProps {
   onBack: () => void
   onLogin: (user: AuthUser, tokens?: { accessToken?: string; refreshToken?: string }) => void
+  initialRole?: UserRole
+  adminOnly?: boolean
 }
 
-export default function LoginPage({ onBack, onLogin }: LoginPageProps) {
-  const [role, setRole] = useState<AccountRole>('donor')
+const publicRoles = [
+  { value: 'donor', label: 'Donor', copy: 'Restaurant, hotel, caterer', icon: Store },
+  { value: 'receiver', label: 'Receiver', copy: 'NGO, orphanage, shelter', icon: Users },
+] as const
+
+const adminRoles = [
+  { value: 'admin', label: 'Admin', copy: 'Control center access', icon: ShieldCheck },
+] as const
+
+export default function LoginPage({ onBack, onLogin, initialRole = 'donor', adminOnly = false }: LoginPageProps) {
+  const [role, setRole] = useState<UserRole>(initialRole)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [otpSent, setOtpSent] = useState(false)
@@ -80,41 +91,31 @@ export default function LoginPage({ onBack, onLogin }: LoginPageProps) {
                 <p className="mt-2 text-slate-500 dark:text-slate-400">Choose your account type and use the phone number entered during registration.</p>
               </div>
 
-              <div className="mb-6 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRole('donor')
-                    setOtpSent(false)
-                    setOtp('')
-                  }}
-                  className={`login-role-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${
-                    role === 'donor'
-                      ? 'border-emerald-400 bg-emerald-100 text-emerald-950 ring-4 ring-emerald-100 dark:bg-emerald-400/20 dark:text-emerald-100 dark:ring-emerald-400/15'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-black dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:border-emerald-400/30 dark:hover:bg-emerald-400/10 dark:hover:text-white'
-                  }`}
-                >
-                  <Store className={role === 'donor' ? 'text-emerald-700 dark:text-emerald-100' : 'text-slate-500 dark:text-emerald-100'} size={24} />
-                  <p className="mt-3 font-black">Donor</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-300">Restaurant, hotel, caterer</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRole('receiver')
-                    setOtpSent(false)
-                    setOtp('')
-                  }}
-                  className={`login-role-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${
-                    role === 'receiver'
-                      ? 'border-emerald-400 bg-emerald-100 text-emerald-950 ring-4 ring-emerald-100 dark:bg-emerald-400/20 dark:text-emerald-100 dark:ring-emerald-400/15'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-slate-950 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:border-emerald-400/30 dark:hover:bg-emerald-400/10 dark:hover:text-white'
-                  }`}
-                >
-                  <Users className={role === 'receiver' ? 'text-emerald-700 dark:text-emerald-100' : 'text-slate-500 dark:text-emerald-100'} size={24} />
-                  <p className="mt-3 font-black">Receiver</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-300">NGO, orphanage, shelter</p>
-                </button>
+              <div className={`mb-6 grid gap-3 ${adminOnly ? '' : 'sm:grid-cols-2'}`}>
+                {(adminOnly ? adminRoles : publicRoles).map((item) => {
+                  const Icon = item.icon
+                  const active = role === item.value
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => {
+                        setRole(item.value)
+                        setOtpSent(false)
+                        setOtp('')
+                      }}
+                      className={`login-role-card rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 ${
+                        active
+                          ? 'border-emerald-400 bg-emerald-100 text-emerald-950 ring-4 ring-emerald-100 dark:bg-emerald-400/20 dark:text-emerald-100 dark:ring-emerald-400/15'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50 hover:text-slate-950 dark:border-white/10 dark:bg-white/10 dark:text-slate-100 dark:hover:border-emerald-400/30 dark:hover:bg-emerald-400/10 dark:hover:text-white'
+                      }`}
+                    >
+                      <Icon className={active ? 'text-emerald-700 dark:text-emerald-100' : 'text-slate-500 dark:text-emerald-100'} size={24} />
+                      <p className="mt-3 font-black">{item.label}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-300">{item.copy}</p>
+                    </button>
+                  )
+                })}
               </div>
 
               <div className="grid gap-5">

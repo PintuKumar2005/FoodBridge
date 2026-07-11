@@ -10,6 +10,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -55,6 +56,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MongoException.class)
     ResponseEntity<ErrorResponse> handleMongoUnavailable(MongoException ex, HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, "Database is unavailable. Check MongoDB connection settings.", request.getRequestURI(), Map.of());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), request.getRequestURI(), Map.of());
     }
 
     @ExceptionHandler(Exception.class)

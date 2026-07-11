@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
 import {
-  AlertCircle, BarChart3, Bell, Bookmark, CalendarDays, Check, CheckCircle2, Clock3, Compass,
-  LayoutDashboard, LogOut, MapPin, Menu, MessageSquare, Moon,
+  AlertCircle, BarChart3, Bell, Bookmark, CalendarDays, Check, CheckCircle2, Clock3, Compass, FileCheck2,
+  LayoutDashboard, Loader2, LogOut, MapPin, Menu, MessageSquare, Moon,
   Package, Search, Send, ShieldCheck, Sparkles,
   Truck, UserCircle, Users, Utensils, X, XCircle,
 } from 'lucide-react'
@@ -9,7 +9,8 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  createFoodRequest, getDonations, getFoodRequests, getProfile, updateFoodRequest,
+  createFoodRequest, getDonations, getFoodRequests, getProfile, updateFoodRequest, updateProfile,
+  isAuthError,
   type AnalyticsResponse, type AppNotification, type AuthUser, type DashboardMessage, type FoodDonation, type FoodRequest, type ProfileResponse, type StoredDocument,
 } from '../api'
 
@@ -195,6 +196,11 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
       getProfile({ userId: user.id }),
     ])
 
+    if ([foodResult, requestResult, profileResult].some((result) => result.status === 'rejected' && isAuthError(result.reason))) {
+      onLogout()
+      return
+    }
+
     if (foodResult.status === 'fulfilled') {
       setAvailableFood(foodResult.value.donations)
     } else {
@@ -218,7 +224,12 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
     }
 
     setLoading(false)
-  }, [user.id])
+  }, [onLogout, user.id])
+
+  const handleProfileUpdated = (updatedProfile: ProfileResponse) => {
+    setProfile(updatedProfile)
+    setMessage({ type: 'success', text: 'Account information updated successfully.' })
+  }
 
   useEffect(() => { void loadDashboard() }, [loadDashboard])
 
@@ -530,7 +541,7 @@ export default function ReceiverDashboard({ user, onLogout, themeToggle }: Recei
             )}
             {activeSection === 'messages' && <MessagesPanel messages={messages} error={messageError} />}
             {activeSection === 'notifications' && <NotificationsPage notifications={notifications} error={notificationError} />}
-            {activeSection === 'profile' && <ProfilePanel profile={currentProfile} onLogout={onLogout} />}
+            {activeSection === 'profile' && <ProfilePanel profile={currentProfile} onUpdated={handleProfileUpdated} onLogout={onLogout} />}
           </div>
         </main>
       </div>
@@ -580,6 +591,11 @@ function LoaderIcon() {
 }
 
 function StatusMessage({ message, onClose }: { message: { type: 'success' | 'error' | 'info'; text: string }; onClose: () => void }) {
+  useEffect(() => {
+    const timeoutId = window.setTimeout(onClose, 1000)
+    return () => window.clearTimeout(timeoutId)
+  }, [message.text, message.type, onClose])
+
   return (
     <div role={message.type === 'error' ? 'alert' : 'status'} aria-live="polite" className={`mb-5 flex items-start justify-between gap-4 rounded-3xl border px-5 py-4 text-sm font-bold ${message.type === 'error' ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200' : message.type === 'info' ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200' : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200'}`}>
       <span className="flex items-start gap-3">{message.type === 'error' ? <AlertCircle className="mt-0.5 shrink-0" size={18} /> : <CheckCircle2 className="mt-0.5 shrink-0" size={18} />}{message.text}</span>
@@ -736,7 +752,8 @@ function FoodGrid({ title, foods, loading, requests, onView, onRequest, savedFoo
                   </div>
                   <div className="mt-2 space-y-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     <p className="flex items-start gap-1.5"><MapPin className="mt-0.5 shrink-0 text-orange-500" size={13} /><span className="line-clamp-1">{food.location}</span></p>
-                    <p className="flex items-center gap-1.5"><Sparkles className="shrink-0 text-orange-500" size={13} /><span className="truncate">Expires {formatDate(food.expiryTime)}</span></p>
+                    {food.distanceKm !== undefined && <p className="flex items-center gap-1.5"><Compass className="shrink-0 text-orange-500" size={13} /><span className="truncate">{food.distanceKm} km away</span></p>}
+                    <p className="flex items-center gap-1.5"><Sparkles className="shrink-0 text-orange-500" size={13} /><span className="truncate">Prepared {formatDate(food.expiryTime)}</span></p>
                   </div>
                   {food.description && <p className="mt-2 line-clamp-1 text-[11px] font-semibold leading-4 text-slate-500 dark:text-slate-400">{food.description}</p>}
                   <div className="mt-3 grid grid-cols-[1fr_1.15fr] gap-1.5">
@@ -1009,6 +1026,22 @@ function formatProfileLabel(label: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function visibleProfileEntries(profile: ProfileResponse): Array<[string, unknown]> {
+  return [
+    ['User ID', profile.id],
+    ['Status', profile.status || profile.verificationStatus],
+    ['User Name', profile.name],
+    ['Organization Name', profile.organizationName],
+    ['Type', profile.organizationType],
+    ['Email', profile.email],
+    ['Phone No', profile.phone],
+    ['Full Address', profile.address],
+    ['District', profile.city],
+    ['State', profile.state],
+    ['Pincode', profile.pincode],
+  ].filter(([, value]) => value !== undefined && value !== null && value !== '')
+}
+
 function formatFileSize(size?: number) {
   if (!size) return 'Size not available'
   if (size < 1024) return `${size} B`
@@ -1016,15 +1049,26 @@ function formatFileSize(size?: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function ProfilePanel({ profile, onLogout }: { profile: ProfileResponse; onLogout: () => void }) {
+function fileToStoredDocument(file: File): Promise<StoredDocument> {
+  if (file.size > 2 * 1024 * 1024) return Promise.reject(new Error(`${file.name} must be smaller than 2 MB`))
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve({ name: file.name, type: file.type, size: file.size, data: String(reader.result) })
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`))
+    reader.readAsDataURL(file)
+  })
+}
+
+function ProfilePanel({ profile, onUpdated, onLogout }: { profile: ProfileResponse; onUpdated: (profile: ProfileResponse) => void; onLogout: () => void }) {
   const documents = Object.entries(profile.documents ?? {})
     .filter((entry): entry is [string, StoredDocument] => Boolean(entry[1]))
+  const [editingAccount, setEditingAccount] = useState(false)
+  const [editingDocuments, setEditingDocuments] = useState(false)
+
   const detailEntries = Object.entries(profile.details ?? {})
-    .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+    .filter(([key, value]) => !['latitude', 'longitude'].includes(key) && value !== undefined && value !== null && value !== '')
     .sort(([first], [second]) => first.localeCompare(second))
-  const profileEntries = Object.entries(profile as Record<string, unknown>)
-    .filter(([key, value]) => !['documents', 'details'].includes(key) && value !== undefined && value !== null && value !== '')
-    .sort(([first], [second]) => first.localeCompare(second))
+  const profileEntries = visibleProfileEntries(profile)
 
   return (
     <section>
@@ -1036,14 +1080,28 @@ function ProfilePanel({ profile, onLogout }: { profile: ProfileResponse; onLogou
             <p className="mt-1 text-sm font-semibold text-slate-500 dark:text-slate-300">Showing account, registration, and verification data saved for this receiver.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-white/10 dark:text-slate-300">{profileEntries.length + detailEntries.length} fields</span>
             <button onClick={onLogout} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-red-700">
               <LogOut size={15} />Log out
             </button>
           </div>
         </div>
 
-        <h4 className="mt-6 text-lg font-black">Account information</h4>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <h4 className="text-lg font-black">Account information</h4>
+          <button type="button" onClick={() => setEditingAccount((open) => !open)} className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-600 dark:bg-white dark:text-slate-950 dark:hover:bg-emerald-200">
+            {editingAccount ? 'Close' : 'Update'}
+          </button>
+        </div>
+        {editingAccount && (
+          <AccountUpdateCard
+            profile={profile}
+            onCancel={() => setEditingAccount(false)}
+            onUpdated={(updatedProfile) => {
+              onUpdated(updatedProfile)
+              setEditingAccount(false)
+            }}
+          />
+        )}
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           {profileEntries.map(([label, value]) => (
             <div key={label} className="rounded-3xl border border-slate-100 bg-[#F9FAFB] p-4 dark:border-white/[.08] dark:bg-[#1F2937]">
@@ -1073,8 +1131,23 @@ function ProfilePanel({ profile, onLogout }: { profile: ProfileResponse; onLogou
               <p className="text-xs font-black uppercase tracking-[.22em] text-emerald-600 dark:text-emerald-300">Documents</p>
               <h4 className="mt-2 text-2xl font-black">Uploaded documents</h4>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-white/10 dark:text-slate-300">{documents.length} files</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-white/10 dark:text-slate-300">{documents.length} files</span>
+              <button type="button" onClick={() => setEditingDocuments((open) => !open)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-600 dark:bg-white dark:text-slate-950 dark:hover:bg-emerald-200">
+                <FileCheck2 size={15} />
+                {editingDocuments ? 'Close' : 'Update documents'}
+              </button>
+            </div>
           </div>
+          {editingDocuments && (
+            <DocumentUpdateCard
+              onCancel={() => setEditingDocuments(false)}
+              onUpdated={(updatedProfile) => {
+                onUpdated(updatedProfile)
+                setEditingDocuments(false)
+              }}
+            />
+          )}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {documents.map(([key, document]) => {
               const href = document.url || document.data
@@ -1096,6 +1169,177 @@ function ProfilePanel({ profile, onLogout }: { profile: ProfileResponse; onLogou
         </div>
       </section>
     </section>
+  )
+}
+
+function DocumentUpdateCard({ onUpdated, onCancel }: { onUpdated: (profile: ProfileResponse) => void; onCancel: () => void }) {
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState('')
+  const documentFields = [
+    ['registrationCertificate', 'Registration Certificate'],
+    ['organizationIdProof', 'Organization ID Proof'],
+  ] as const
+
+  useEffect(() => {
+    if (!status) return
+    const timeoutId = window.setTimeout(() => setStatus(''), 1000)
+    return () => window.clearTimeout(timeoutId)
+  }, [status])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setStatus('')
+    setSaving(true)
+    try {
+      const formData = new FormData(event.currentTarget)
+      const documents: Record<string, StoredDocument> = {}
+      for (const [name] of documentFields) {
+        const file = formData.get(name)
+        if (file instanceof File && file.size > 0) {
+          documents[name] = await fileToStoredDocument(file)
+        }
+      }
+      if (!Object.keys(documents).length) {
+        throw new Error('Choose at least one document to update.')
+      }
+      const response = await updateProfile({ documents })
+      onUpdated(response.profile)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Could not update documents.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/10">
+      <div className="grid gap-4 md:grid-cols-2">
+        {documentFields.map(([name, label]) => (
+          <label key={name} className="flex cursor-pointer flex-col gap-3 rounded-3xl border border-dashed border-emerald-200 bg-white p-4 text-sm font-black transition hover:border-emerald-400 dark:border-emerald-400/20 dark:bg-white/10">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-200">
+              <FileCheck2 size={20} />
+            </span>
+            <span>{label}</span>
+            <span className="break-words text-xs font-bold text-slate-500 dark:text-slate-300">{selectedFiles[name] || 'PDF, JPG or PNG up to 2 MB'}</span>
+            <input
+              name={name}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="sr-only"
+              onChange={(event) => setSelectedFiles((current) => ({ ...current, [name]: event.currentTarget.files?.[0]?.name || '' }))}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-slate-300 dark:border-white/10 dark:bg-white/10 dark:text-slate-200">
+          Cancel
+        </button>
+        <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-600 disabled:opacity-60">
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+          Save documents
+        </button>
+      </div>
+      {status && <p className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:bg-red-400/10 dark:text-red-200">{status}</p>}
+    </form>
+  )
+}
+
+function AccountUpdateCard({ profile, onUpdated, onCancel }: { profile: ProfileResponse; onUpdated: (profile: ProfileResponse) => void; onCancel: () => void }) {
+  const [draft, setDraft] = useState({
+    name: profile.name || '',
+    organizationName: profile.organizationName || '',
+    organizationType: profile.organizationType || '',
+    email: profile.email || '',
+    phone: profile.phone || '',
+    address: profile.address || '',
+    city: profile.city || '',
+    state: profile.state || '',
+    pincode: profile.pincode || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState('')
+  const inputClass = 'rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:border-white/10 dark:bg-white/10 dark:focus:ring-emerald-400/10'
+
+  useEffect(() => {
+    if (!status) return
+    const timeoutId = window.setTimeout(() => setStatus(''), 1000)
+    return () => window.clearTimeout(timeoutId)
+  }, [status])
+
+  const setField = (key: keyof typeof draft, value: string) => {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setStatus('')
+    setSaving(true)
+    try {
+      const response = await updateProfile({
+        name: draft.name.trim(),
+        organizationName: draft.organizationName.trim(),
+        organizationType: draft.organizationType.trim(),
+        email: draft.email.trim(),
+        phone: draft.phone.trim(),
+        address: draft.address.trim(),
+        city: draft.city.trim(),
+        state: draft.state.trim(),
+        pincode: draft.pincode.replace(/\D/g, '').slice(0, 6),
+      })
+      onUpdated(response.profile)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'Could not update account information.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/10">
+      <div className="grid gap-4 md:grid-cols-2">
+        <ReadonlyProfileField label="User ID" value={profile.id} />
+        <ReadonlyProfileField label="Status" value={profile.status || profile.verificationStatus || 'Active'} />
+        <EditableProfileField label="User Name" value={draft.name} onChange={(value) => setField('name', value)} inputClass={inputClass} />
+        <EditableProfileField label="Organization Name" value={draft.organizationName} onChange={(value) => setField('organizationName', value)} inputClass={inputClass} />
+        <EditableProfileField label="Type" value={draft.organizationType} onChange={(value) => setField('organizationType', value)} inputClass={inputClass} />
+        <EditableProfileField label="Email" type="email" value={draft.email} onChange={(value) => setField('email', value)} inputClass={inputClass} />
+        <EditableProfileField label="Phone No" type="tel" value={draft.phone} onChange={(value) => setField('phone', value)} inputClass={inputClass} />
+        <EditableProfileField label="Pincode" value={draft.pincode} onChange={(value) => setField('pincode', value.replace(/\D/g, '').slice(0, 6))} inputClass={inputClass} inputMode="numeric" pattern="[0-9]{6}" maxLength={6} />
+        <EditableProfileField label="District" value={draft.city} onChange={(value) => setField('city', value)} inputClass={inputClass} />
+        <EditableProfileField label="State" value={draft.state} onChange={(value) => setField('state', value)} inputClass={inputClass} />
+        <EditableProfileField label="Full Address" value={draft.address} onChange={(value) => setField('address', value)} inputClass={inputClass} wide />
+      </div>
+      <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:border-slate-300 dark:border-white/10 dark:bg-white/10 dark:text-slate-200">
+          Cancel
+        </button>
+        <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-600 disabled:opacity-60">
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+          Save changes
+        </button>
+      </div>
+      {status && <p className="mt-3 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:bg-red-400/10 dark:text-red-200">{status}</p>}
+    </form>
+  )
+}
+
+function ReadonlyProfileField({ label, value }: { label: string; value?: string }) {
+  return (
+    <label className="grid gap-2 text-sm font-black">
+      {label}
+      <input value={value || 'Not available'} readOnly className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-500 outline-none dark:border-white/10 dark:bg-white/5 dark:text-slate-300" />
+    </label>
+  )
+}
+
+function EditableProfileField({ label, value, onChange, inputClass, wide = false, type = 'text', ...props }: { label: string; value: string; onChange: (value: string) => void; inputClass: string; wide?: boolean; type?: string } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'className' | 'type'>) {
+  return (
+    <label className={`grid gap-2 text-sm font-black ${wide ? 'md:col-span-2' : ''}`}>
+      {label}
+      <input required type={type} value={value} onChange={(event) => onChange(event.target.value)} className={inputClass} {...props} />
+    </label>
   )
 }
 
@@ -1146,9 +1390,12 @@ function FoodDetailsModal({ food, pending, onClose, onRequest }: { food: FoodDon
               <p className="mt-2 text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">{food.description || 'No description provided by donor.'}</p>
             </div>
 
+            <AIAnalysisPanel analysis={food.aiAnalysis} />
+
             <div className="mt-4 grid gap-3">
               <PremiumDetail icon={MapPin} label="Pickup address" value={food.location} />
-              <PremiumDetail icon={Sparkles} label="Expires" value={formatDate(food.expiryTime)} />
+              {food.distanceKm !== undefined && <PremiumDetail icon={Compass} label="Distance" value={`${food.distanceKm} km away`} />}
+              <PremiumDetail icon={Sparkles} label="Preparation time" value={formatDate(food.expiryTime)} />
               <PremiumDetail icon={Clock3} label="Pickup window" value={formatDate(food.pickupTime)} />
             </div>
           </div>
@@ -1161,6 +1408,54 @@ function FoodDetailsModal({ food, pending, onClose, onRequest }: { food: FoodDon
       </section>
     </div>
   )
+}
+
+function AIAnalysisPanel({ analysis }: { analysis?: Record<string, unknown> }) {
+  const entries = aiAnalysisEntries(analysis)
+
+  return (
+    <div className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/10">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-black uppercase tracking-[.18em] text-emerald-700 dark:text-emerald-200">AI Analyze</p>
+        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100 dark:bg-white/10 dark:text-emerald-100 dark:ring-white/10">
+          {analysis?.aiProvider ? `By ${String(analysis.aiProvider)}` : 'Not available'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {entries.map(([label, value]) => (
+          <div key={label} className="rounded-2xl bg-white/80 p-3 ring-1 ring-emerald-100 dark:bg-white/10 dark:ring-white/10">
+            <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+            <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-700 dark:text-slate-100">{value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function aiAnalysisEntries(analysis?: Record<string, unknown>): Array<[string, string]> {
+  if (!analysis) return [['Status', 'AI analysis not available']]
+  return [
+    ['Food Type', formatAnalysisValue(analysis.foodType)],
+    ['Category', formatAnalysisValue(analysis.category)],
+    ['Estimated Servings', formatAnalysisValue(analysis.estimatedServings)],
+    ['Freshness', formatAnalysisValue(analysis.freshness)],
+    ['Packaging Quality', formatAnalysisValue(analysis.packaging)],
+    ['Visible Damage', formatAnalysisValue(analysis.visibleDamage)],
+    ['Mold', formatAnalysisValue(analysis.mold)],
+    ['Leakage', formatAnalysisValue(analysis.leakage)],
+    ['Burn Marks', formatAnalysisValue(analysis.burnMarks)],
+    ['Contamination Signs', formatAnalysisValue(analysis.contaminationSigns)],
+    ['Visible Issues', formatAnalysisValue(analysis.visibleIssues)],
+    ['Confidence Score', analysis.confidence === undefined || analysis.confidence === null || analysis.confidence === '' ? 'Not available' : `${analysis.confidence}%`],
+    ['Assessment Basis', formatAnalysisValue(analysis.assessmentBasis)],
+  ]
+}
+
+function formatAnalysisValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return 'Not available'
+  if (Array.isArray(value)) return value.length ? value.map(String).join(', ') : 'None visible'
+  return String(value)
 }
 
 function PremiumFact({ icon: Icon, label, value }: { icon: typeof Utensils; label: string; value: string }) {

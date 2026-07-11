@@ -16,6 +16,8 @@ public interface CompatibilityApiService {
 
     Map<String, Object> createDonation(Map<String, Object> payload);
 
+    Map<String, Object> analyzeDonationImage(Map<String, Object> payload);
+
     Map<String, Object> getDonations(String donorId, String status);
 
     Map<String, Object> deleteDonation(String id, Map<String, Object> payload);
@@ -27,6 +29,8 @@ public interface CompatibilityApiService {
     Map<String, Object> updateFoodRequest(String id, Map<String, Object> payload);
 
     Map<String, Object> getProfile(String userId);
+
+    Map<String, Object> updateProfile(Map<String, Object> payload);
 
     Map<String, Object> getNotifications(String userId);
 

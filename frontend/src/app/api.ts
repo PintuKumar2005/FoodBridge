@@ -6,6 +6,24 @@ type ApiOptions = RequestInit & {
   body?: BodyInit | Record<string, unknown> | null
 }
 
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+export function isAuthError(error: unknown) {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403)
+}
+
+export function hasAuthToken() {
+  return Boolean(localStorage.getItem(ACCESS_TOKEN_KEY))
+}
+
 async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers)
   const token = localStorage.getItem(ACCESS_TOKEN_KEY)
@@ -32,7 +50,7 @@ async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T>
   const payload = await response.json().catch(() => null)
 
   if (!response.ok) {
-    throw new Error(payload?.message ?? 'Something went wrong')
+    throw new ApiError(payload?.message ?? 'Something went wrong', response.status)
   }
 
   return payload as T
@@ -68,6 +86,7 @@ export type AuthUser = {
   status?: string
   createdAt?: string
   details?: Record<string, unknown>
+  documents?: Record<string, StoredDocument | undefined>
 }
 
 export type AuthResponse = {
@@ -123,10 +142,19 @@ export type FoodDonation = {
   location: string
   latitude?: number
   longitude?: number
+  distanceKm?: number
   pickupTime: string
   expiryTime: string
   description: string
   image?: StoredDocument
+  priority?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL'
+  remainingPickupWindowMinutes?: number
+  manualReviewRequired?: boolean
+  manualReviewReason?: string
+  aiAnalysis?: Record<string, unknown>
+  validation?: Record<string, unknown>
+  locationDetails?: Record<string, unknown>
+  recommendedNgos?: Array<Record<string, unknown>>
   status: 'available' | 'requested' | 'assigned' | 'collected'
   assignedReceiverName?: string
   assignedVolunteerName?: string
@@ -188,21 +216,21 @@ export type ProfileResponse = AuthUser & {
   documents?: Record<string, StoredDocument | undefined>
 }
 
-export function sendOtp(payload: { role: AccountRole; phone: string }) {
+export function sendOtp(payload: { role: UserRole; phone: string }) {
   return apiRequest<{ message: string; otp?: string }>('/auth/send-otp', {
     method: 'POST',
     body: payload,
   })
 }
 
-export function verifyOtp(payload: { role: AccountRole; phone: string; otp: string }) {
+export function verifyOtp(payload: { role: UserRole; phone: string; otp: string }) {
   return apiRequest<AuthResponse>('/auth/verify-otp', {
     method: 'POST',
     body: payload,
   })
 }
 
-export function directLogin(payload: { role: AccountRole; phone: string }) {
+export function directLogin(payload: { role: UserRole; phone: string }) {
   return apiRequest<AuthResponse>('/auth/direct-login', {
     method: 'POST',
     body: payload,
@@ -216,7 +244,7 @@ export function registerDonor(payload: DonorRegistrationPayload) {
   })
 }
 
-export function registerReceiver(payload: Record<string, FormDataEntryValue>) {
+export function registerReceiver(payload: Record<string, unknown>) {
   return apiRequest<AuthResponse>('/receivers', {
     method: 'POST',
     body: payload,
@@ -225,6 +253,13 @@ export function registerReceiver(payload: Record<string, FormDataEntryValue>) {
 
 export function createDonation(payload: Omit<FoodDonation, 'id' | 'donorName' | 'organizationName' | 'status' | 'assignedReceiverName' | 'assignedVolunteerName' | 'createdAt'>) {
   return apiRequest<{ message: string; donation: FoodDonation }>('/donations', { method: 'POST', body: payload })
+}
+
+export function analyzeDonationImage(payload: Partial<FoodDonation> & { image?: StoredDocument }) {
+  return apiRequest<{ message: string; aiAnalysis: Record<string, unknown>; validation: Record<string, unknown>; qualityCheck: Record<string, unknown> }>('/donations/analyze', {
+    method: 'POST',
+    body: payload,
+  })
 }
 
 export function getDonations(params: { donorId?: string; status?: 'available' } = {}) {
@@ -259,6 +294,19 @@ export function getCurrentUser() {
 export function getProfile(params: { userId?: string } = {}) {
   const query = new URLSearchParams(params).toString()
   return apiRequest<{ profile?: ProfileResponse | null; user?: ProfileResponse } | ProfileResponse | null>(`/profile${query ? `?${query}` : ''}`)
+}
+
+export type ProfileUpdatePayload = Partial<Pick<AuthUser, 'name' | 'organizationName' | 'organizationType' | 'email' | 'phone' | 'address' | 'city' | 'state' | 'pincode'> & {
+  latitude: number | null
+  longitude: number | null
+  documents: Record<string, StoredDocument | undefined>
+}>
+
+export function updateProfile(payload: ProfileUpdatePayload) {
+  return apiRequest<{ message: string; profile: ProfileResponse }>('/profile', {
+    method: 'PUT',
+    body: payload,
+  })
 }
 
 export function getNotifications(params: { userId?: string } = {}) {

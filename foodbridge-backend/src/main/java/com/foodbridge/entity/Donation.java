@@ -1,6 +1,10 @@
 package com.foodbridge.entity;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,6 +41,22 @@ public class Donation {
     private Instant expiryTime;
     private String description;
     private StoredFile image;
+    private String priority;
+    private Long remainingPickupWindowMinutes;
+    private Boolean manualReviewRequired;
+    private String manualReviewReason;
+
+    @Builder.Default
+    private Map<String, Object> aiAnalysis = new HashMap<>();
+
+    @Builder.Default
+    private Map<String, Object> validation = new HashMap<>();
+
+    @Builder.Default
+    private Map<String, Object> locationDetails = new HashMap<>();
+
+    @Builder.Default
+    private List<Map<String, Object>> recommendedNgos = new ArrayList<>();
 
     @Indexed
     @Builder.Default

@@ -63,7 +63,7 @@ export function SelectField({ label, name, options, required = false }: { label:
   )
 }
 
-export function UploadBox({ title }: { title: string }) {
+export function UploadBox({ title, name, required = false }: { title: string; name?: string; required?: boolean }) {
   return (
     <div className="registration-upload rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-5 transition hover:border-emerald-300 hover:bg-emerald-50/60 dark:border-white/10 dark:bg-white/5 dark:hover:bg-emerald-400/10">
       <div className="flex items-start gap-4">
@@ -73,9 +73,12 @@ export function UploadBox({ title }: { title: string }) {
         <div>
           <p className="font-black text-slate-950 dark:text-white">{title}</p>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Upload PDF, JPG, or PNG</p>
-          <button type="button" className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-white/10 dark:text-emerald-100 dark:ring-emerald-400/20">
-            Choose File
-          </button>
+          {name && (
+            <label className="mt-4 inline-flex cursor-pointer rounded-xl bg-white px-4 py-2 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-white/10 dark:text-emerald-100 dark:ring-emerald-400/20">
+              <input className="sr-only" name={name} type="file" required={required} accept=".pdf,.jpg,.jpeg,.png" />
+              Choose File{required ? ' *' : ''}
+            </label>
+          )}
         </div>
       </div>
     </div>

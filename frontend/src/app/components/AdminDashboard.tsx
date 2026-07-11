@@ -22,6 +22,7 @@ import {
   getAdminUsers,
   getDonations,
   getFoodRequests,
+  isAuthError,
   type AuthUser,
   type FoodDonation,
   type FoodRequest,
@@ -68,6 +69,12 @@ function EmptyState({ title }: { title: string }) {
   );
 }
 
+function formatDate(value?: string) {
+  if (!value) return 'Not provided';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not provided' : date.toLocaleString();
+}
+
 export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [donations, setDonations] = useState<FoodDonation[]>([]);
@@ -94,6 +101,10 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
       setDonations(donationsResponse.donations);
       setRequests(requestsResponse.requests);
     } catch (err) {
+      if (isAuthError(err)) {
+        onLogout();
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Unable to load live data');
     } finally {
       setIsLoading(false);
@@ -132,6 +143,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
 
   const donors = users.filter((u) => u.type === 'donor');
   const receivers = users.filter((u) => u.type === 'receiver');
+  const currentDonations = donations.filter((d) => d.status !== 'collected');
   const availableDonations = donations.filter((d) => d.status === 'available');
   const collectedDonations = donations.filter((d) => d.status === 'collected');
   const pendingRequests = requests.filter((r) => r.status === 'pending');
@@ -145,7 +157,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
     { label: 'Success Rate', value: `${completionRate}%`, detail: 'Completed donation flow', icon: TrendingUp, tone: 'from-slate-800 to-slate-600' },
   ];
 
-  const recentDonations = donations.slice(-5).reverse();
+  const recentDonations = donations.slice(0, 5);
 
   return (
     <div className="admin-workspace min-h-screen bg-[linear-gradient(180deg,#F8FAFC_0%,#F0FDF4_52%,#ECFDF5_100%)] text-[#111827] dark:bg-[linear-gradient(180deg,#020617_0%,#0B1220_52%,#111827_100%)] dark:text-[#F9FAFB]">
@@ -329,7 +341,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-emerald-600">User Management</p>
-                  <h2 className="text-2xl font-bold tracking-tight">Verified partners</h2>
+                  <h2 className="text-2xl font-bold tracking-tight">All user data</h2>
                 </div>
                 <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600">{users.length} total</span>
               </div>
@@ -337,29 +349,45 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                 <EmptyState title="No users registered" />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] border-separate border-spacing-y-3">
+                  <table className="w-full min-w-[1240px] border-separate border-spacing-y-3">
                     <thead>
                       <tr className="text-left text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                        <th className="px-4">User ID</th>
                         <th className="px-4">Name</th>
                         <th className="px-4">Organization</th>
                         <th className="px-4">Email</th>
-                        <th className="px-4">Type</th>
                         <th className="px-4">Phone</th>
+                        <th className="px-4">Type</th>
+                        <th className="px-4">District</th>
+                        <th className="px-4">State</th>
+                        <th className="px-4">Pincode</th>
+                        <th className="px-4">Status</th>
+                        <th className="px-4">Joined</th>
                         <th className="px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {users.map((u) => (
                         <tr key={u.id} className="rounded-[20px] bg-slate-50 shadow-sm">
-                          <td className="rounded-l-[20px] px-4 py-4 font-semibold text-slate-900">{u.name}</td>
+                          <td className="rounded-l-[20px] px-4 py-4 font-mono text-xs text-slate-500">{u.id}</td>
+                          <td className="px-4 py-4 font-semibold text-slate-900">{u.name || 'Not provided'}</td>
                           <td className="px-4 py-4 text-slate-600">{u.organizationName}</td>
                           <td className="px-4 py-4 text-slate-600">{u.email}</td>
+                          <td className="px-4 py-4 text-slate-600">{u.phone}</td>
                           <td className="px-4 py-4">
                             <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold capitalize text-emerald-700 ring-1 ring-emerald-200">
                               {u.type}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-slate-600">{u.phone}</td>
+                          <td className="px-4 py-4 text-slate-600">{u.city || 'Not provided'}</td>
+                          <td className="px-4 py-4 text-slate-600">{u.state || 'Not provided'}</td>
+                          <td className="px-4 py-4 text-slate-600">{u.pincode || 'Not provided'}</td>
+                          <td className="px-4 py-4">
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold capitalize text-blue-700 ring-1 ring-blue-200">
+                              {u.status || 'active'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-slate-600">{formatDate(u.createdAt)}</td>
                           <td className="rounded-r-[20px] px-4 py-4">
                             <div className="flex justify-end gap-2">
                               <button onClick={() => setSelectedItem(u)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-600 ring-1 ring-slate-200 transition hover:text-emerald-600">
@@ -383,16 +411,16 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
             <section>
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-emerald-600">Food Donations</p>
-                  <h2 className="text-2xl font-bold tracking-tight">Donation inventory</h2>
+                  <p className="text-sm font-semibold text-emerald-600">Current Donations</p>
+                  <h2 className="text-2xl font-bold tracking-tight">Live donation inventory</h2>
                 </div>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">{donations.length} donations</span>
+                <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm">{currentDonations.length} current • {donations.length} total</span>
               </div>
-              {donations.length === 0 ? (
-                <EmptyState title="No food donations found" />
+              {currentDonations.length === 0 ? (
+                <EmptyState title="No current food donations found" />
               ) : (
                 <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                  {donations.map((donation) => (
+                  {currentDonations.map((donation) => (
                     <article key={donation.id} className="rounded-[28px] border border-white/80 bg-white p-5 shadow-xl shadow-slate-900/5 transition hover:-translate-y-1 hover:shadow-2xl">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
@@ -406,6 +434,7 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
                         <p className="flex items-center gap-2"><Package size={16} /> {donation.quantity} {donation.unit}</p>
                         <p className="flex items-start gap-2"><MapPin className="mt-0.5" size={16} /> <span>{donation.location}</span></p>
                         <p className="flex items-center gap-2"><Clock size={16} /> {new Date(donation.pickupTime).toLocaleString()}</p>
+                        <p className="text-xs font-semibold text-slate-400">Donation ID: {donation.id}</p>
                       </div>
                       <button
                         onClick={() => handleDeleteDonation(donation.id)}
@@ -486,11 +515,18 @@ export default function AdminDashboard({ user, onLogout }: AdminDashboardProps) 
             </div>
             <div className="grid gap-3 p-6 text-sm">
               {[
+                ['User ID', selectedItem.id],
                 ['Email', selectedItem.email],
                 ['Phone', selectedItem.phone],
+                ['Status', selectedItem.status || 'active'],
+                ['User Type', selectedItem.type],
+                ['Organization Type', selectedItem.organizationType],
                 ['Address', selectedItem.address],
-                ['Type', selectedItem.organizationType],
-                ['Joined', new Date(selectedItem.createdAt).toLocaleString()],
+                ['District', selectedItem.city],
+                ['State', selectedItem.state],
+                ['Pincode', selectedItem.pincode],
+                ['Documents', selectedItem.documents ? `${Object.keys(selectedItem.documents).length} uploaded` : 'Not provided'],
+                ['Joined', formatDate(selectedItem.createdAt)],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-2xl bg-slate-50 p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{label}</p>
